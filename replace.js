@@ -4,7 +4,8 @@ require("./Entity");
 require("./LineSolver.js");
 
 const SRC = "D:\\Project\\Bida3D\\Client\\src\\modules\\physics";
-const DST = "D:\\Project\\Bida3D\\BidaCpp\\BidaCpp\\Classes\\modules\\physics";
+const DST = "D:\\Project\\Bida3D\\BidaCpp\\BidaCpp\\Classes\\modules/physics";
+const replaceOldFile = false;
 
 function solveClassData(classData, classObj){
     var lines = classData.split("\n");
@@ -35,6 +36,9 @@ function solveClassData(classData, classObj){
 
         if(line.indexOf("function")!= -1){
             genFuncInClass(line, classObj);
+        } else if(line.indexOf("this.") != -1 && line.indexOf("=") > line.indexOf("this.")){
+            console.log("line.indexOf(\"this.\")");
+            genAttInClass(line, classObj);
         }
         
     }
@@ -52,27 +56,90 @@ function getFunctionInPropertyBlock(lines, start, end, property, classObj){
 
 function genFuncInClass(line, classObj, property){
     line = line.trim();
-    var startIdx = 0;
-    var endIdx = line.indexOf(":");
-    if(endIdx == -1) endIdx = line.indexOf("=");
-    var funcName = line.substring(startIdx, endIdx);
-    if(funcName.indexOf("proto.") != -1) 
-        funcName = funcName.replace("proto.", "");
-    if(property != undefined) funcName = funcName + property;
-    var funcObj = FuncObj(funcName);
+    var funcName = getFuncName(line, property);
+    var funcType = getTypeFromName(funcName, true);
+    var funcObj = FuncObj(funcName, funcType);
 
     startIdx = line.indexOf("(");
     endIdx = line.indexOf(")");
     paramData = line.substring(startIdx+1, endIdx);
+    params = genParamFromData(paramData);
+    funcObj.setParamList(params);
+    classObj.funcList.push(funcObj);
+}
+
+function genParamFromData(){
     paramList =[];
     if(paramData.length >0) 
         paramList = paramData.split(",");
     params = [];
     for (var j = 0; j < paramList.length; j ++){
-        params.push({type:"", name: paramList[j]});
+        var paramName = paramList[j].trim();
+        var paramType = getTypeFromName(paramName, false);
+        params.push({type:paramType, name: paramName});
     }
-    funcObj.setParamList(params);
-    classObj.funcList.push(funcObj);
+    return params;
+}
+
+function genAttInClass(line, classObj){
+    line = line.trim();
+    var startIdx = line.indexOf("this.");
+    var endIdx = line.indexOf("=");
+    var attName = line.substring(startIdx+5, endIdx).trim();
+    // if(attName.indexOf("proto.") != -1) 
+    //     attName = attName.replace("proto.", "");
+    // if(property != undefined) attName = attName + property;
+    var attType = getTypeFromName(attName, false);
+    var attObj = AttObj(attName, attType);
+    classObj.addAtt(attObj);
+}
+
+function getFuncName(line, property){
+    console.log("line", line);
+    line = line.trim();
+    var startIdx = 0;
+    var endIdx = line.indexOf(":");
+    if(endIdx == -1) endIdx = line.indexOf("=");
+    if(endIdx == -1) {
+        startIdx = line.indexOf("function")+9;
+        endIdx = line.indexOf("(");
+    }
+    var funcName = line.substring(startIdx, endIdx);
+    funcName = funcName.trim();
+    if(funcName.indexOf("proto.") != -1) 
+            funcName = funcName.replace("proto.", "");
+    if(property != undefined) funcName = funcName+property;
+    return funcName;
+}
+
+function getTypeFromName(attName, isFunc){
+    nameList = ["cue", "_cue", "width", "height"];
+    typeList = ["Cue* ", "Cue *", "double", "double"];
+
+    for (var i = 0; i < nameList.length; i ++){
+        if(attName == nameList[i] || attName == "_"+nameList[i]){
+            return typeList[i];
+        }
+    }
+
+    preList = ["is", "check"];
+    preTypeList = ["bool", "bool"];
+    for (var i = 0; i < preList.length; i ++){
+        if(attName.startsWith(preList[i])){
+            return preTypeList[i];
+        }
+    }
+
+    memberList = ["velocity", "position", "acceleration"];
+    typeListOfMember = ["Vec3", "Vec3", "Vec3"];
+
+    for (var i = 0; i < memberList.length; i ++){
+        if(attName.indexOf(memberList[i]) != -1){
+            return typeListOfMember[i];
+        }
+    }
+    if(isFunc) return "void";
+    return "int";
 }
 
 function solveAFile(filePath, dstPath){
@@ -108,8 +175,11 @@ function solveAFile(filePath, dstPath){
 
             var classData = data.substring(startIdx, endIdx);
             solveClassData(classData, classObj);
-            console.log("outside "+JSON.stringify(classObj));
+            //console.log("outside "+JSON.stringify(classObj));
             var filePathH = dstPath.replace(".js",".h");
+            if (fs.existsSync(filePathH) && !replaceOldFile) {
+                filePathH +=".new";
+            }
             fs.writeFile(filePathH, classObj.renderH(), (err)=>{
                 if (err) throw err;
                 console.log('Saved filePathH!');
@@ -123,7 +193,9 @@ function solveAFile(filePath, dstPath){
             var contentCpp = "";
             contentCpp+=genBeginerOfCpp(fileName);
             contentCpp+= genContentCpp(classData, classObj.className);
-
+            if (fs.existsSync(filePathCpp) && !replaceOldFile) {
+                filePathCpp +=".new";
+            }
             fs.writeFile(filePathCpp, contentCpp, (err)=>{
                 if (err) throw err;
                 console.log('Saved '+filePathCpp);
@@ -144,7 +216,7 @@ function genContentCpp(classData, className){
     var lines = classData.split("\n");
     for (var i = 0; i < lines.length; i ++){
         var line = lines[i];
-        if(line.indexOf("defineProperty")){
+        if(line.indexOf("defineProperty")!= -1){
             var count = 1;
             var out = false;
             for (var j = i+1; j<lines.length; j ++){
@@ -170,36 +242,25 @@ function genContentCpp(classData, className){
         var newLine = solveALine(lines[i], className);
         contentCpp += newLine+"\n";
     }
-    console.log("genContentCpp ***\n"+ contentCpp);
+    //console.log("genContentCpp ***\n"+ contentCpp);
     return contentCpp; 
 }
 
-searchList = ["},", "push", "==="];
-replacementList = ["}", "push_back", "=="];
+searchList = ["cc.log","math.sin","math.cos","Math.sqrt","Math.abs","const ", "let ","vector.","vector.multiply","PhysicsConstants.","ItemConstant.get","utils.log","ItemConstant.CUE_BOX","let i=","},", "push", "===", "!==", "this.", "fr.Localization.text"];
+replacementList = ["CCLOG","sin","cos","sqrt", "abs","auto ", "auto ","mVector::","mVector::multiply","PhysicsConstants::","ItemConstant::get","CCLOG","ItemConstant::CUE_BOX","int i=","}", "push_back", "==", "!=","this->", "fr::Localization::text"];
 function solveALine(line, className, property){
+    console.log("solveALine "+ line);
     if(line.trim().startsWith("//")) return line;
     var newLine = "";
     if(line.indexOf("function")!= -1){
-        line = line.trim();
-        var startIdx = 0;
-        var endIdx = line.indexOf(":");
-        if(endIdx == -1) endIdx = line.indexOf("=");
-        var funcName = line.substring(startIdx, endIdx);
-        if(funcName.indexOf("proto.") != -1) 
-                funcName = funcName.replace("proto.", "");
-        if(property != undefined) funcName = funcName+property;
-        var funcObj = FuncObj(funcName);
+        var funcName = getFuncName(line, property);
+        var funcType = getTypeFromName(funcName, true);
+        var funcObj = FuncObj(funcName, funcType);
 
         startIdx = line.indexOf("(");
         endIdx = line.indexOf(")");
         paramData = line.substring(startIdx+1, endIdx);
-        paramList =[];
-        if(paramData.length >0) 
-            paramList = paramData.split(",");
-        params = [];
-        for (var j = 0; j < paramList.length; j ++){
-            params.push({type:"", name: paramList[j]});
-        }
+        var params = genParamFromData(paramData);
         funcObj.setParamList(params);
         newLine = funcObj.renderCpp(className);
         var subStr = line.substring(0, endIdx+1);
@@ -212,7 +273,6 @@ function solveALine(line, className, property){
     }else {
         for (var i = 0;i < searchList.length; i ++){
             const search = searchList[i];
-            const replacer = new RegExp(search, 'g');
             line = line.split(search).join(replacementList[i]);
         }
         return line;
@@ -291,7 +351,7 @@ function removeText(filePath){
         data = data.trim();
         var newContent = LineSolver().removeAllTextAfterChar(data, "=");
 
-        fs.writeFile(filePath+".new", newContent, (err)=>{
+        fs.writeFile(filePath, newContent, (err)=>{
             if (err) throw err;
             console.log('Saved '+filePath);
         });
@@ -315,8 +375,9 @@ function insertText(filePath){
     });     
 }
 
-
-//solveAFile(SRC+"/PhysicsConstants.js", DST+"/PhysicsConstants.js");
-
-//removeText("D:\\Project\\Bida3D\\BidaCpp\\BidaCpp\\Classes\\modules\\physics/PhysicsConstants.h");
-insertText("D:\\Project\\Bida3D\\BidaCpp\\BidaCpp\\Classes\\modules\\physics/PhysicsConstants.cpp");
+//solve(SRC, DST);
+solveAFile(SRC+"/BreakRack.js", DST+"/BreakRack.js");
+//line = solveALine("return balls.map(ball => {");
+//console.log(line);
+//removeText(DST+"/CueChallengeMgr.h");
+//insertText("D:\\Project\\Bida3D\\BidaCpp\\BidaCpp\\Classes\\modules\\physics/PhysicsConstants.cpp");

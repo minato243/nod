@@ -13,7 +13,7 @@ LineSolver = function(){
             for (var i = 0; i < lines.length; i ++){
                 line = lines[i];
                 var newLine = line;
-                if(line != "") newLine = this.removeTextAfterChar(line, char);
+                if(line != "" && line.indexOf(char) != -1) newLine = this.removeTextAfterChar(line, char);
                 newContent += newLine +"\n";
             }
             return newContent;

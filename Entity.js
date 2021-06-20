@@ -15,8 +15,9 @@ ClassObj = function(className){
             result +="class "+ this.className+"{\n";
             result += "public:\n";
             for (var i = 0; i < this.attList.length; i ++){
-                result +="\t"+this.attList[i].attType+" "+ this.attList[i].attName+"\n";
+                result +="\t"+this.attList[i].type+" "+ this.attList[i].name+";\n";
             }
+            result+="\n";
             for (var i = 0; i < this.funcList.length; i ++){
                 var funcObj = this.funcList[i];
                 result +="\t"+funcObj.renderH()+";\n";
@@ -25,16 +26,26 @@ ClassObj = function(className){
             result +="#endif";
             return result;
 
-        }    
+        },
+        
+        addAtt: function(att){
+            var exist = false;
+            for (var i = 0; i < this.attList.length; i ++){
+                if(this.attList[i].name == att.name){
+                    return;
+                }
+            }
+            this.attList.push(att);
+        }
     }
     return ClassO;
 }
 
-FuncObj = function(funcName){
+FuncObj = function(funcName, funcType){
     FuncO = {
         funcName: funcName,
         parList: [],
-        reType: "void",
+        reType: funcType?funcType:"void",
 
         setParamList: function(paramList){
             this.parList = paramList;
