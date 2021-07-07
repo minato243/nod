@@ -34,8 +34,20 @@ LineSolver = function(){
             var lines = data.split("\n");
             for (var i = 0; i < lines.length; i ++){
                 line = lines[i];
+                if(line.trim() == ""
+                || line.trim().startsWith("//")
+                || line.startsWith("public:") || line.startsWith("{")
+                || line.trim().startsWith("};")
+                || line.trim().startsWith("\#include")
+                || line.trim().startsWith("using")
+                || line.trim().startsWith("const")){
+                    newContent += line +"\n";
+                    continue;
+                }
+                
+                console.log("line "+ line);
                 var newLine = line;
-                if(line != "") newLine = this.insertBeginLine(line, insertText, condition);
+                newLine = this.insertBeginLine(line, insertText, condition);
                 newContent += newLine +"\n";
             }
             return newContent;
